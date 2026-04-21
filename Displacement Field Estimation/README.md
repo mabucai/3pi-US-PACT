@@ -95,7 +95,7 @@ If you use this code in your research, please cite the associated manuscript and
 ## License
 
 This repository is distributed under the Apache License 2.0. For further details, please refer to the `LICENSE` file.
-Copyright (c) 2026 Youshen Xiao.
+Copyright (c) 2026 YuQiao Wang.
 
 ## Contact
 
