@@ -80,6 +80,7 @@ If you use this code in your research, please cite the associated work if applic
 ## License
 
 This project is licensed under the Apache License 2.0. See LICENSE for details.
+Copyright (c) 2026 Youshen Xiao.
 
 ## Contact
 
