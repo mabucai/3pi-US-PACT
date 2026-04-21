@@ -62,7 +62,7 @@ If CUDA MEX compilation fails or GPU execution is unavailable, the workflow auto
 
 ## Usage
 
-1. Prepare the input files in `DisplacementFieldEstimation_data/` for the two-time-point workflow, or in `DisplacementFieldEstimation_one_cardiac_cycle_data/` for the one-cardiac-cycle workflow.
+1. Download the dataset from [Figshare](https://doi.org/10.6084/m9.figshare.31986894). repare the input files in `DisplacementFieldEstimation_data/` for the two-time-point workflow, or in `DisplacementFieldEstimation_one_cardiac_cycle_data/` for the one-cardiac-cycle workflow.
 2. Open MATLAB in the repository root, or run the scripts from the terminal with `matlab -batch`.
 3. If displacement-field data already exist under `DisplacementFieldEstimation_data/DisplacementField/`, the program automatically skips the displacement-field computation step and proceeds with the downstream workflow using the existing results.
 4. Run either of the main scripts below:
@@ -95,11 +95,11 @@ If you use this code in your research, please cite the associated manuscript and
 ## License
 
 This repository is distributed under the Apache License 2.0. For further details, please refer to the `LICENSE` file.
+Copyright (c) 2026 Youshen Xiao.
 
 ## Contact
 
-For correspondence regarding this repository, please contact the repository owner.
-
+For questions regarding this repository, please contact the corresponding author at shuai@pku.edu.cn.
 
 ## Appendix
 
