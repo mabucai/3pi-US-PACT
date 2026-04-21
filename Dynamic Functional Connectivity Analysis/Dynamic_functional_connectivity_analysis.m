@@ -4,7 +4,7 @@ addpath('utils');
 
 %% 1. Data Loading & States Loading
 rng(7); 
-load('dFC_data/dFC_data.mat');
+load('data/Dynamic_functional_connectivity_data.mat');
 % Phase Extraction
 signal_total = dfc_phase(PA_signal); 
 

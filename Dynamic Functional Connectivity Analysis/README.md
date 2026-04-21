@@ -19,7 +19,7 @@ Running this script produces:
 
 ```text
 .
-├── dFC_data/                                  
+├── data/                                  
 ├── Dynamic_functional_connectivity_analysis.m    
 ├── utils/                                    
 │   ├── dfc_phase.m                           
@@ -33,7 +33,7 @@ Running this script produces:
 
 | File | Description |
 | :--- | :--- |
-| **`dFC_data/`** | Input data folder for dFC analysis.
+| **`data/`** | Input data folder for dynamic functional connectivity analysis.
 | **`Dynamic_functional_connectivity_analysis.m`** | **Main script.** Executes the full dFC pipeline, generating dynamic phase matrix and dynamic transitions of connectivity states. |
 | **`dfc_phase.m`** | Performs phase extraction from signals. |
 | **`dfc_matrix_show.m`** | Visualizes dynamic transitions of phase matrix. |
@@ -48,13 +48,13 @@ Running this script produces:
 - MATLAB R2022b or later
 
 ## Usage
-1. Download the dataset from [Figshare](https://doi.org/10.6084/m9.figshare.31986894) and place the `dFC_data.mat` file into the `dFC_data/` folder.
+1. Download the dataset from [Figshare](https://doi.org/10.6084/m9.figshare.31986894) and place the `Dynamic_functional_connectivity_data.mat` file into the `data/` folder.
    
    **Expected directory structure:**
    ```text
    .
-   ├── dFC_data/
-   │   └── dFC_data.mat        # Input data for dFC analysis
+   ├── data/
+   │   └── Dynamic_functional_connectivity_data.mat        # Input data
    ├── Dynamic_functional_connectivity_analysis.m 
    └── ...
 
