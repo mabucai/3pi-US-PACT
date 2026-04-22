@@ -60,9 +60,26 @@ Running these scripts produces:
 
 If CUDA MEX compilation fails or GPU execution is unavailable, the workflow automatically falls back to the CPU implementation.
 
+### `mexcuda` Toolchain Compatibility
+
+The GPU path depends on successful compilation of `func/demons3d_cuda.cu` via `mexcuda`. In practice, the CUDA toolkit, host compiler, and MATLAB release must be compatible with each other.
+
+On the tested server environment with MATLAB R2023a, the following version combination worked:
+
+- `nvcc`: CUDA 11.8
+- `gcc`: 11.4.0
+- MATLAB: 2023a
+
+The following incompatible combinations were observed during deployment:
+
+- CUDA 12.x caused `mexcuda` / `nvcc` to reject the deprecated `compute_35` target used by the default MATLAB compilation path.
+- GCC 13.x was rejected by CUDA 11.8 with `unsupported GNU version`.
+
+If `mexcuda` still fails, the code will fall back to the CPU implementation, but full-resolution runs may become substantially slower.
+
 ## Usage
 
-1. Download the dataset from [Figshare](https://doi.org/10.6084/m9.figshare.31986894). Prepare the input files in `DisplacementFieldEstimation_data/` for the two-time-point workflow, or in `DisplacementFieldEstimation_one_cardiac_cycle_data/` for the one-cardiac-cycle workflow.
+1. Prepare the input files in `DisplacementFieldEstimation_data/` for the two-time-point workflow, or in `DisplacementFieldEstimation_one_cardiac_cycle_data/` for the one-cardiac-cycle workflow.
 2. Open MATLAB in the repository root, or run the scripts from the terminal with `matlab -batch`.
 3. If displacement-field data already exist under `DisplacementFieldEstimation_data/DisplacementField/`, the program automatically skips the displacement-field computation step and proceeds with the downstream workflow using the existing results.
 4. Run either of the main scripts below:
@@ -95,11 +112,12 @@ If you use this code in your research, please cite the associated manuscript and
 ## License
 
 This repository is distributed under the Apache License 2.0. For further details, please refer to the `LICENSE` file.
-Copyright (c) 2026 YuQiao Wang.
+Copyright (c) 2026 YuQiao Wang and ZhuoJun Xie.
 
 ## Contact
 
-For questions regarding this repository, please contact the corresponding author at shuai@pku.edu.cn.
+For correspondence regarding this repository, please contact the repository owner.
+
 
 ## Appendix
 
@@ -152,7 +170,11 @@ For `DisplacementFieldEstimation_one_cardiac_cycle_data/`:
 
 ### C. Hardware Requirement and Test Record
 
-The GPU-based workflow was tested on an NVIDIA GeForce RTX 4090 GPU with 48 GB of memory (`409048G`).
+The GPU-based workflow was tested on three GPU platforms:
+
+- NVIDIA H100
+- NVIDIA A800
+- NVIDIA GeForce RTX 4090 with 48 GB of memory (`409048G`)
 
 During one representative run, the recorded peak resource usage was:
 
@@ -161,7 +183,7 @@ During one representative run, the recorded peak resource usage was:
 
 Accordingly, the GPU workflow should be executed on hardware with sufficient GPU memory and system RAM. In practice, a 48 GB GPU is recommended for stable execution of the full-resolution workflow.
 
-Because the implementation involves GPU acceleration, interpolation, and floating-point arithmetic, minor numerical differences may be observed across different hardware or software environments. However, the overall displacement-field estimation results and visual patterns should remain broadly consistent.
+Across H100, A800, and RTX 4090 48 GB, the resulting displacement-field estimation outputs were found to be broadly consistent, with no obvious hardware-dependent differences observed in the final results or visual patterns.
 
 ### D. References
 
