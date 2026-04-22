@@ -1,23 +1,25 @@
 clear; clc;
 
-% DisplacementFieldEstimation_cycle_compute.m
-% Pure displacement-field computation for a 4-D cardiac cycle volume.
+% DisplacementFieldEstimation_one_cardiac_cycle.m
+% Pure displacement-field computation for a cardiac cycle volume sequence.
+% Each frame is stored as an individual 3-D MAT file under volumeMatrices/.
 % No visualisation is generated.
 
 %% === Configuration ===
 addpath('func');
 
-cfg.dataDir        = './DisplacementFieldEstimation_one_cardiac_cycle_data';
-cfg.volumeSubDir   = 'volumeMatrices';
-cfg.flowDir        = fullfile(cfg.dataDir, 'DisplacementField');
-cfg.volumeFileName = 'volumeMatrices_one_cardiac_cycle.mat';
-cfg.volumeVarName  = 'volumeMatrices_one_cardiac_cycle';
+cfg.dataDir          = './DisplacementFieldEstimation_one_cardiac_cycle_data';
+cfg.volumeSubDir     = 'volumeMatrices';
+cfg.flowDir          = fullfile(cfg.dataDir, 'DisplacementField');
+cfg.filePattern      = 'volumeMatrix_*.mat';
+cfg.volumeVarName    = 'volumeMatrix';
+cfg.expectedNumFrame = 60;
 
-cfg.scale          = 2;
-cfg.pyrLevels      = 3;
-cfg.iterations     = [500 400 200];
-cfg.smooth         = 0.8;
-cfg.useGPU         = true;
+cfg.scale            = 2;
+cfg.pyrLevels        = 3;
+cfg.iterations       = [500 400 200];
+cfg.smooth           = 0.8;
+cfg.useGPU           = true;
 cfg.resetGPUEachIter = true;
 
 %% === Path resolve ===
@@ -30,19 +32,33 @@ if ~exist(cfg.flowDir, 'dir')
     mkdir(cfg.flowDir);
 end
 
-srcFile = fullfile(cfg.volumeDir, cfg.volumeFileName);
-assert(exist(srcFile, 'file') == 2, 'cycle:noVolumeFile', 'Volume file not found: %s', srcFile);
+frameFiles = dir(fullfile(cfg.volumeDir, cfg.filePattern));
+assert(~isempty(frameFiles), ...
+    'cycle:noVolumeFrames', ...
+    'No frame MAT files found under %s with pattern %s.', ...
+    cfg.volumeDir, cfg.filePattern);
 
-%% === Dataset info (HDF5) ===
-[datasetPath, datasetSize] = resolve_h5_dataset(srcFile, cfg.volumeVarName);
-assert(numel(datasetSize) == 4, 'cycle:badRank', 'Expected 4-D dataset, got %d-D.', numel(datasetSize));
+[frameNumbers, order] = sort(extract_frame_numbers({frameFiles.name}));
+frameFiles = frameFiles(order);
 
-Nx = datasetSize(1);
-Ny = datasetSize(2);
-Nz = datasetSize(3);
-Nt = datasetSize(4);
+assert(all(diff(frameNumbers) == 1), ...
+    'cycle:nonContinuousFrames', ...
+    'Expected consecutive frame files, got: %s', mat2str(frameNumbers));
+assert(frameNumbers(1) == 1, ...
+    'cycle:badFrameStart', ...
+    'Expected frame numbering to start from 1, got %d.', frameNumbers(1));
 
+Nt = numel(frameFiles);
 assert(Nt >= 2, 'cycle:badFrames', 'Need at least 2 frames, got %d.', Nt);
+
+if ~isempty(cfg.expectedNumFrame)
+    assert(Nt == cfg.expectedNumFrame, ...
+        'cycle:badFrameCount', ...
+        'Expected %d frames, found %d.', cfg.expectedNumFrame, Nt);
+end
+
+sampleVolume = read_volume_frame_file(fullfile(cfg.volumeDir, frameFiles(1).name), cfg);
+[Nx, Ny, Nz] = size(sampleVolume);
 
 if cfg.useGPU
     [gpuReady, selectedBackend] = try_prepare_gpu();
@@ -59,14 +75,23 @@ else
 end
 
 %% === Pairwise compute: (1->2), (3->4), ... ===
-for t = 1:2:(Nt - 1)
-    chunk = h5read(srcFile, datasetPath, [1 1 1 t], [Nx Ny Nz 2]);
-    moving = single(chunk(:,:,:,1));
-    fixed  = single(chunk(:,:,:,2));
+for idx = 1:2:(Nt - 1)
+    tMoving = frameNumbers(idx);
+    tFixed  = frameNumbers(idx + 1);
+
+    moving = read_volume_frame_file(fullfile(cfg.volumeDir, frameFiles(idx).name), cfg);
+    fixed  = read_volume_frame_file(fullfile(cfg.volumeDir, frameFiles(idx + 1).name), cfg);
+
+    assert(isequal(size(moving), [Nx Ny Nz]), ...
+        'cycle:sizeMismatch', ...
+        'Unexpected size in %s.', frameFiles(idx).name);
+    assert(isequal(size(fixed), [Nx Ny Nz]), ...
+        'cycle:sizeMismatch', ...
+        'Unexpected size in %s.', frameFiles(idx + 1).name);
 
     [u, v, w, usedGPU] = compute_flow_pair(moving, fixed, cfg, gpuReady);
 
-    outFile = fullfile(cfg.flowDir, sprintf('D_%02dto%02d.bin', t, t + 1));
+    outFile = fullfile(cfg.flowDir, sprintf('D_%02dto%02d.bin', tMoving, tFixed));
     write_flow_bin(outFile, u, v, w);
     fprintf('Wrote %s\n', outFile);
 
@@ -76,6 +101,51 @@ for t = 1:2:(Nt - 1)
 end
 
 fprintf('Done.\n');
+
+
+function frameNumbers = extract_frame_numbers(fileNames)
+frameNumbers = zeros(1, numel(fileNames));
+
+for idx = 1:numel(fileNames)
+    tokens = regexp(fileNames{idx}, '^volumeMatrix_(\d+)\.mat$', 'tokens', 'once');
+    assert(~isempty(tokens), ...
+        'cycle:badFrameFileName', ...
+        'Unexpected frame file name: %s', fileNames{idx});
+    frameNumbers(idx) = str2double(tokens{1});
+end
+end
+
+
+function img = read_volume_frame_file(srcFile, cfg)
+assert(exist(srcFile, 'file') == 2, 'cycle:noVolumeFile', 'Volume file not found: %s', srcFile);
+
+S = load(srcFile);
+varCandidates = {cfg.volumeVarName, 'volumeMatrix', 'volume', 'img'};
+
+varName = '';
+for k = 1:numel(varCandidates)
+    if isfield(S, varCandidates{k})
+        varName = varCandidates{k};
+        break;
+    end
+end
+
+if isempty(varName)
+    fields = fieldnames(S);
+    if numel(fields) == 1
+        varName = fields{1};
+    end
+end
+
+assert(~isempty(varName), ...
+    'cycle:noDataset', ...
+    'No expected volume variable found in %s.', srcFile);
+
+img = single(S.(varName));
+assert(ndims(img) == 3, ...
+    'cycle:badVolumeRank', ...
+    'Expected 3-D volume in %s.', srcFile);
+end
 
 
 function [ok, backend] = try_prepare_gpu()
@@ -153,38 +223,4 @@ count = count + fwrite(fid, w, 'single');
 expected = numel(u) + numel(v) + numel(w);
 assert(count == expected, 'cycle:writeFailed', ...
     'Short write for %s: wrote %d of %d elements.', outFile, count, expected);
-end
-
-
-function [datasetPath, datasetSize] = resolve_h5_dataset(h5file, datasetName)
-info = h5info(h5file);
-[datasetPath, datasetSize] = walk_group(info, datasetName, '/');
-assert(~isempty(datasetPath), 'cycle:noDataset', 'Dataset %s not found in %s', datasetName, h5file);
-end
-
-
-function [foundPath, foundSize] = walk_group(groupInfo, datasetName, prefix)
-foundPath = '';
-foundSize = [];
-
-for i = 1:numel(groupInfo.Datasets)
-    ds = groupInfo.Datasets(i);
-    if strcmp(ds.Name, datasetName)
-        if strcmp(prefix, '/')
-            foundPath = ['/' ds.Name];
-        else
-            foundPath = [prefix '/' ds.Name];
-        end
-        foundSize = ds.Dataspace.Size;
-        return;
-    end
-end
-
-for i = 1:numel(groupInfo.Groups)
-    g = groupInfo.Groups(i);
-    [foundPath, foundSize] = walk_group(g, datasetName, g.Name);
-    if ~isempty(foundPath)
-        return;
-    end
-end
 end
