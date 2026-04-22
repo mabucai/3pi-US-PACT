@@ -27,7 +27,10 @@ Running these scripts produces:
 │   └── ...
 ├── DisplacementFieldEstimation_one_cardiac_cycle_data/
 │   ├── volumeMatrices/
-│   │   └── volumeMatrices_one_cardiac_cycle.mat
+│   │   ├── volumeMatrix_01.mat
+│   │   ├── volumeMatrix_02.mat
+│   │   ├── ...
+│   │   └── volumeMatrix_60.mat
 │   └── ...
 ├── func/
 │   ├── demons3d_cuda.cu
@@ -43,12 +46,12 @@ Running these scripts produces:
 | File | Description |
 | :--- | :--- |
 | **`DisplacementFieldEstimation.m`** | **Main script.** Estimates the displacement field between `ref` and `t1`, writes the binary displacement-field output, and generates ROI visualizations. |
-| **`DisplacementFieldEstimation_one_cardiac_cycle.m`** | Performs sequential displacement-field estimation for data from one complete cardiac cycle. |
+| **`DisplacementFieldEstimation_one_cardiac_cycle.m`** | Performs pairwise displacement-field estimation across one complete cardiac cycle using per-frame files `volumeMatrix_01.mat` to `volumeMatrix_60.mat`. |
 | **`func/demonsGPU.m`** | MATLAB wrapper for the GPU-based Demons registration workflow. |
 | **`func/demons3d_cuda.cu`** | CUDA MEX kernel implementing the core 3D Demons update. |
 | **`func/demonsCPU.m`** | CPU fallback implementation of the same registration workflow. |
 | **`DisplacementFieldEstimation_data/`** | Data directory for the two-time-point workflow, including `volumeMatrix_ref.mat`, `volumeMatrix_t1.mat`, and the precomputed displacement field `D_ref2t1.bin`. |
-| **`DisplacementFieldEstimation_one_cardiac_cycle_data/`** | Data directory for the one-cardiac-cycle workflow, including `volumeMatrices_one_cardiac_cycle.mat`. |
+| **`DisplacementFieldEstimation_one_cardiac_cycle_data/`** | Data directory for the one-cardiac-cycle workflow, including split frame files `volumeMatrix_01.mat` to `volumeMatrix_60.mat`. |
 | **`plot/roi_view.png`** | Example ROI visualization output. |
 
 ## Requirements
@@ -79,7 +82,7 @@ If `mexcuda` still fails, the code will fall back to the CPU implementation, but
 
 ## Usage
 
-1. Prepare the input files in `DisplacementFieldEstimation_data/` for the two-time-point workflow, or in `DisplacementFieldEstimation_one_cardiac_cycle_data/` for the one-cardiac-cycle workflow.
+1. Prepare the input files in `DisplacementFieldEstimation_data/` for the two-time-point workflow, or in `DisplacementFieldEstimation_one_cardiac_cycle_data/volumeMatrices/` for the one-cardiac-cycle workflow.
 2. Open MATLAB in the repository root, or run the scripts from the terminal with `matlab -batch`.
 3. If displacement-field data already exist under `DisplacementFieldEstimation_data/DisplacementField/`, the program automatically skips the displacement-field computation step and proceeds with the downstream workflow using the existing results.
 4. Run either of the main scripts below:
@@ -112,7 +115,7 @@ If you use this code in your research, please cite the associated manuscript and
 ## License
 
 This repository is distributed under the Apache License 2.0. For further details, please refer to the `LICENSE` file.
-Copyright (c) 2026 YuQiao Wang and ZhuoJun Xie.
+Copyright (c) 2026 YuQiao Wang and Zhuojun Xie.
 
 ## Contact
 
@@ -164,9 +167,10 @@ To mitigate potential failures in displacement-field computation caused by limit
 
 For `DisplacementFieldEstimation_one_cardiac_cycle_data/`:
 
-- number of files: 1
+- number of files: 60 split volume files.
 - included files:
-  `volumeMatrices/volumeMatrices_one_cardiac_cycle.mat` (12.9 GB)
+  `volumeMatrices/volumeMatrix_01.mat` to `volumeMatrices/volumeMatrix_60.mat` (each file: 219 MB)
+
 
 ### C. Hardware Requirement and Test Record
 
