@@ -1,207 +1,262 @@
 # Displacement Field Estimation
 
-This repository provides MATLAB-based code for 3D displacement field estimation from ultrasound volume matrices.
-It reproduces the displacement-field estimation workflow and the two ROI visualizations at the `t1` time point shown in Fig. 4b of the manuscript, and also provides a batch-processing workflow for one complete cardiac cycle.
-The pipeline uses a custom CUDA MEX implementation with automatic CPU fallback when GPU execution is unavailable.
+This repository provides MATLAB code for 3D displacement field estimation from ultrasound volume matrices. It supports two workflows:
 
-The main scripts in this repository are:
+1. a two-time-point workflow that estimates the displacement field from `ref` to `t1` and generates ROI visualizations corresponding to Fig. 4b of the manuscript;
+2. a one-cardiac-cycle workflow that performs pairwise displacement-field estimation across a sequence of 60 individually stored volume files.
+
+The implementation uses a custom CUDA MEX kernel when GPU execution is available and automatically falls back to a CPU implementation otherwise.
+
+## 1. System requirements
+
+### Operating system
+
+- CPU execution can be used on operating systems supported by MATLAB R2021a or later.
+- The GPU-enabled workflow was validated in a Linux server environment.
+
+### Software dependencies
+
+- MATLAB R2021a or later
+- Image Processing Toolbox
+- Parallel Computing Toolbox
+- For GPU acceleration: a CUDA toolkit version compatible with the MATLAB release in use
+
+### Tested environment
+
+The GPU workflow was validated with the following software stacks:
+
+- MATLAB 2023a + CUDA 11.8 (`nvcc`) + GCC 11.4.0
+- MATLAB R2021a + CUDA 12.5 (`nvcc`) + GCC 9.4.0
+
+The following incompatible combinations were observed in the validated environment:
+
+- CUDA 12.x with the default `mexcuda` configuration in MATLAB R2021a, because `mexcuda` / `nvcc` rejected the deprecated `compute_35` target used by the default compilation path
+- GCC 13.x with MATLAB R2021a CUDA MEX compilation, because `mexcuda` reported `unsupported GNU version`
+
+### Non-standard hardware
+
+To run the software itself, no frame grabber, acquisition card, ultrasound scanner, or photoacoustic hardware is required. The code operates offline on saved MATLAB volume files.
+
+Optional non-standard hardware for acceleration:
+
+- an NVIDIA CUDA-capable GPU for the GPU registration path
+
+Validated GPU platforms:
+
+- NVIDIA H100
+- NVIDIA A800
+- NVIDIA GeForce RTX 4090 48 GB
+
+Observed peak resource usage during one representative full-resolution GPU run:
+
+- peak GPU memory: 44,247 MiB
+- peak system RAM: 18,458 MiB
+
+In practice, a 48 GB GPU is recommended for stable full-resolution recomputation. If no compatible GPU is available, the code will run with the CPU fallback, but runtime may become substantially longer.
+
+### Expected setup time on a standard computer
+
+If MATLAB and the required toolboxes are already installed, repository setup typically takes under 1 minutes.
+
+## 2. Installation guide
+
+No additional package installation is required beyond MATLAB and its toolboxes.
+
+To verify the environment, run:
+
+```bash
+matlab -batch "mex -setup C++; gpuDeviceCount('available'); mexcuda('func/demons3d_cuda.cu', '-output', 'func/demons3d_cuda')"
+```
+
+If this command completes without error, the environment is ready. The check typically takes under 1 minutes.
+
+## 3. Demo
+
+### Demo A: two-time-point workflow
+
+This demo reproduces the displacement-field estimation workflow between `ref` and `t1` and generates ROI visualizations.
+
+Expected input layout:
+
+```text
+DisplacementFieldEstimation_data/
+├── volumeMatrices/
+│   ├── volumeMatrix_ref.mat
+│   └── volumeMatrix_t1.mat
+└── DisplacementField/
+    └── D_ref2t1.bin   (optional precomputed cache)
+```
+
+Run:
+
+```bash
+matlab -batch "DisplacementFieldEstimation"
+```
+
+Expected output:
+
+- a dense 3D displacement-field binary file such as `D_ref2t1.bin`
+- an ROI visualization image written to `plot/roi_view.png`
+
+If `DisplacementFieldEstimation_data/DisplacementField/D_ref2t1.bin` already exists, the script reuses it and skips the most expensive registration step.
+
+Expected runtime:
+
+- on an NVIDIA GeForce RTX 4090 48 GB GPU, Demo A takes approximately 2.5 minutes
+- runtime may be longer on other hardware, especially when GPU acceleration is unavailable
+
+### Demo B: one-cardiac-cycle workflow
+
+This demo processes a cardiac cycle stored as 60 split volume files and computes pairwise displacement fields for consecutive frame pairs `(01->02), (03->04), ..., (59->60)`.
+
+Expected input layout:
+
+```text
+DisplacementFieldEstimation_one_cardiac_cycle_data/
+└── volumeMatrices/
+    ├── volumeMatrix_01.mat
+    ├── volumeMatrix_02.mat
+    ├── ...
+    └── volumeMatrix_60.mat
+```
+
+Run:
+
+```bash
+matlab -batch "DisplacementFieldEstimation_one_cardiac_cycle"
+```
+
+Expected output:
+
+- pairwise displacement-field binary files in
+  `DisplacementFieldEstimation_one_cardiac_cycle_data/DisplacementField/`
+- output filenames follow the pattern `D_01to02.bin`, `D_03to04.bin`, ..., `D_59to60.bin`
+
+Expected runtime:
+
+- on an NVIDIA GeForce RTX 4090 48 GB GPU, Demo B takes approximately 90 minutes
+- runtime may be longer on other hardware, especially when GPU acceleration is unavailable
+
+## 4. Instructions for use
+
+### 4.1 Running the two-time-point workflow on your own data
+
+1. Convert your two volumetric datasets to MATLAB `.mat` files.
+2. Place them under:
+
+```text
+DisplacementFieldEstimation_data/volumeMatrices/
+```
+
+3. Name the files:
+
+- `volumeMatrix_ref.mat`
+- `volumeMatrix_t1.mat`
+
+4. Make sure the `.mat` files contain a 3D volume variable compatible with the script. In the current implementation, variables named `volumeMatrix_ref` and `volumeMatrix_t1` are supported.
+5. Run:
+
+```bash
+matlab -batch "DisplacementFieldEstimation"
+```
+
+6. The displacement field will be written to:
+
+```text
+DisplacementFieldEstimation_data/DisplacementField/
+```
+
+and the visualization image will be written to:
+
+```text
+plot/roi_view.png
+```
+
+### 4.2 Running the one-cardiac-cycle workflow on your own data
+
+1. Convert each cardiac-cycle frame to a separate MATLAB `.mat` file.
+2. Place the files under:
+
+```text
+DisplacementFieldEstimation_one_cardiac_cycle_data/volumeMatrices/
+```
+
+3. Name the files sequentially:
+
+- `volumeMatrix_01.mat`
+- `volumeMatrix_02.mat`
+- `...`
+- `volumeMatrix_60.mat`
+
+4. Ensure that numbering is consecutive, starts from `01`, and matches the expected total frame count.
+5. Each file should contain one 3D volume variable. In the current implementation, variables named `volumeMatrix`, `volume`, or `img` are accepted; if the file contains only one variable, that variable will also be used.
+6. Run:
+
+```bash
+matlab -batch "DisplacementFieldEstimation_one_cardiac_cycle"
+```
+
+7. Output files will be written to:
+
+```text
+DisplacementFieldEstimation_one_cardiac_cycle_data/DisplacementField/
+```
+
+### 4.3 Input data format
+
+- Input files must be MATLAB `.mat` files.
+- Each input file must contain a 3D ultrasound volume.
+- All frames within one workflow must have identical spatial dimensions.
+- For best compatibility, follow the naming convention and directory structure used in the examples above.
+
+### 4.4 Parameter settings
+
+The main runtime parameters are defined in the entry scripts:
 
 - `DisplacementFieldEstimation.m`
 - `DisplacementFieldEstimation_one_cardiac_cycle.m`
 
-Running these scripts produces:
+Key parameters include:
 
-- dense 3D displacement field outputs
-- ROI / displacement visualization for the two-time-point workflow
+- `cfg.scale`: preprocessing upsampling factor
+- `cfg.pyrLevels`: number of multi-resolution pyramid levels
+- `cfg.iterations`: iterations per pyramid level
+- `cfg.smooth`: Gaussian regularization strength
+- `cfg.useGPU`: whether to attempt GPU execution first
 
-## Repository Structure
+For manuscript reproduction, keep the default parameter settings unchanged.
 
-```text
-.
-├── DisplacementFieldEstimation.m
-├── DisplacementFieldEstimation_one_cardiac_cycle.m
-├── DisplacementFieldEstimation_data/
-│   ├── volumeMatrices/
-│   │   ├── volumeMatrix_ref.mat
-│   │   └── volumeMatrix_t1.mat
-│   └── ...
-├── DisplacementFieldEstimation_one_cardiac_cycle_data/
-│   ├── volumeMatrices/
-│   │   ├── volumeMatrix_01.mat
-│   │   ├── volumeMatrix_02.mat
-│   │   ├── ...
-│   │   └── volumeMatrix_60.mat
-│   └── ...
-├── func/
-│   ├── demons3d_cuda.cu
-│   ├── demonsCPU.m
-│   └── demonsGPU.m
-├── plot/
-│   └── roi_view.png
-└── README.md
-```
+### 4.5 Output files
 
-## File Description
+Two-time-point workflow:
 
-| File | Description |
-| :--- | :--- |
-| **`DisplacementFieldEstimation.m`** | **Main script.** Estimates the displacement field between `ref` and `t1`, writes the binary displacement-field output, and generates ROI visualizations. |
-| **`DisplacementFieldEstimation_one_cardiac_cycle.m`** | Performs pairwise displacement-field estimation across one complete cardiac cycle using per-frame files `volumeMatrix_01.mat` to `volumeMatrix_60.mat`. |
-| **`func/demonsGPU.m`** | MATLAB wrapper for the GPU-based Demons registration workflow. |
-| **`func/demons3d_cuda.cu`** | CUDA MEX kernel implementing the core 3D Demons update. |
-| **`func/demonsCPU.m`** | CPU fallback implementation of the same registration workflow. |
-| **`DisplacementFieldEstimation_data/`** | Data directory for the two-time-point workflow, including `volumeMatrix_ref.mat`, `volumeMatrix_t1.mat`, and the precomputed displacement field `D_ref2t1.bin`. |
-| **`DisplacementFieldEstimation_one_cardiac_cycle_data/`** | Data directory for the one-cardiac-cycle workflow, including split frame files `volumeMatrix_01.mat` to `volumeMatrix_60.mat`. |
-| **`plot/roi_view.png`** | Example ROI visualization output. |
+- displacement field: `DisplacementFieldEstimation_data/DisplacementField/D_ref2t1.bin`
+- ROI figure: `plot/roi_view.png`
 
-## Requirements
+One-cardiac-cycle workflow:
 
-- MATLAB R2021a or newer
-- Image Processing Toolbox
-- Parallel Computing Toolbox
-- CUDA-capable GPU and compatible CUDA Toolkit for GPU acceleration
+- pairwise displacement fields: `DisplacementFieldEstimation_one_cardiac_cycle_data/DisplacementField/D_XXtoYY.bin`
 
-If CUDA MEX compilation fails or GPU execution is unavailable, the workflow automatically falls back to the CPU implementation.
+All displacement fields are written as raw single-precision binary files containing the three displacement components.
 
-### `mexcuda` Toolchain Compatibility
+### 4.6 Reproducing the main results of the paper
 
-The GPU path depends on successful compilation of `func/demons3d_cuda.cu` via `mexcuda`. In practice, the CUDA toolkit, host compiler, and MATLAB release must be compatible with each other.
+To reproduce the main repository-level results associated with the manuscript:
 
-On the tested server environment with MATLAB R2023a, the following version combination worked:
+1. keep the default parameters unchanged;
+2. place the provided `ref` and `t1` example volumes in `DisplacementFieldEstimation_data/volumeMatrices/` and run `DisplacementFieldEstimation` to reproduce the two-ROI visualization workflow corresponding to Fig. 4b;
+3. place the 60 split cardiac-cycle volumes in `DisplacementFieldEstimation_one_cardiac_cycle_data/volumeMatrices/` and run `DisplacementFieldEstimation_one_cardiac_cycle` to reproduce the one-cardiac-cycle pairwise displacement-field workflow.
 
-- `nvcc`: CUDA 11.8
-- `gcc`: 11.4.0
-- MATLAB: 2023a
-
-The following incompatible combinations were observed during deployment:
-
-- CUDA 12.x caused `mexcuda` / `nvcc` to reject the deprecated `compute_35` target used by the default MATLAB compilation path.
-- GCC 13.x was rejected by CUDA 11.8 with `unsupported GNU version`.
-
-If `mexcuda` still fails, the code will fall back to the CPU implementation, but full-resolution runs may become substantially slower.
-
-Typical installation time
-
-On a normal desktop computer with MATLAB already installed, the installation usually takes less than 10 minutes.
-
-## Usage
-
-1. Prepare the input files in `DisplacementFieldEstimation_data/` for the two-time-point workflow, or in `DisplacementFieldEstimation_one_cardiac_cycle_data/volumeMatrices/` for the one-cardiac-cycle workflow.
-2. Open MATLAB in the repository root, or run the scripts from the terminal with `matlab -batch`.
-3. If displacement-field data already exist under `DisplacementFieldEstimation_data/DisplacementField/`, the program automatically skips the displacement-field computation step and proceeds with the downstream workflow using the existing results.
-4. Run either of the main scripts below:
-
-```bash
-# Process DisplacementFieldEstimation_data
-matlab -batch "DisplacementFieldEstimation"
-```
-
-```bash
-# Process DisplacementFieldEstimation_one_cardiac_cycle_data
-matlab -batch "DisplacementFieldEstimation_one_cardiac_cycle"
-```
-## Expected run time
-
-The expected run time depends strongly on hardware.
-
-On a high-memory CUDA-capable GPU, the demo is expected to run substantially faster than the CPU fallback mode. On a normal desktop computer without a suitable GPU, the CPU fallback may take much longer for full-resolution data.
-
-Because the included displacement field D_ref2t1.bin is precomputed, the visualization part of the demo can be completed more quickly when this file is already present.
-
-## Outputs
-
-Running `DisplacementFieldEstimation.m` generates:
-
-- a displacement-field binary file, such as `D_ref2t1.bin`
-- ROI / displacement visualizations
-
-Running `DisplacementFieldEstimation_one_cardiac_cycle.m` generates:
-
-- pairwise displacement-field binary files across the cardiac cycle
-
-## Citation
-
-If you use this code in your research, please cite the associated manuscript and related references as appropriate.
-
-## License
-
-This repository is distributed under the Apache License 2.0. For further details, please refer to the `LICENSE` file.
-Copyright (c) 2026 YuQiao Wang and Zhuojun Xie.
-
-## Contact
-
-For correspondence regarding this repository, please contact the repository owner.
-
-
-## Appendix
-
-### A. Demons Registration Algorithm
-
-Whole-volume motion estimation is formulated as a dense 3D non-rigid registration problem between two ultrasound states (`moving -> fixed`). The objective is to recover a voxel-wise displacement field that minimizes local intensity mismatch while preserving the spatial smoothness of the deformation.
-
-#### Mathematical Formulation
-
-Let \(M\) denote the moving image, \(F\) denote the fixed image, and \(\mathbf{U}(\mathbf{x})\) denote the displacement field at voxel \(\mathbf{x}\). Under the additive Demons formulation, the update field is given by
-
-\[
-\Delta \mathbf{U}(\mathbf{x}) = \frac{\big(F(\mathbf{x}) - M(\mathbf{x}+\mathbf{U}(\mathbf{x}))\big)\,\nabla F(\mathbf{x})}{\|\nabla F(\mathbf{x})\|^2 + \big(F(\mathbf{x}) - M(\mathbf{x}+\mathbf{U}(\mathbf{x}))\big)^2},
-\]
-
-and the displacement field is iteratively updated according to
-
-\[
-\mathbf{U}^{k+1}(\mathbf{x}) = \mathbf{U}^{k}(\mathbf{x}) + \Delta \mathbf{U}(\mathbf{x}).
-\]
-
-This formulation couples the local intensity residual with the structural direction provided by the fixed-image gradient, while the denominator regularizes the update magnitude in low-gradient or high-mismatch regions.
-
-#### Implementation Procedure
-
-1. Intensity normalization and histogram matching are applied to reduce inter-frame contrast bias.
-2. Registration is performed in a coarse-to-fine manner using a multi-resolution pyramid.
-3. At each resolution level, the moving image is warped using the current estimate of \(\mathbf{U}\), after which the incremental update is computed and accumulated iteratively.
-4. Gaussian smoothing is applied to each component of the displacement field after every iteration to enforce spatial coherence.
-5. Updates in low-information or ill-conditioned regions are suppressed to improve numerical stability.
-6. The final displacement field is represented as a dense 3D vector field \(\mathbf{U}\) and stored using MATLAB's `single` data type, corresponding to single-precision floating-point format.
-
-### B. Data Organization
-
-For `DisplacementFieldEstimation_data/`:
-
-- number of files: 3
-- included files:
-  `volumeMatrices/volumeMatrix_ref.mat` (219 MB),
-  `volumeMatrices/volumeMatrix_t1.mat` (219 MB),
-  `DisplacementField/D_ref2t1.bin` (5.8 GB)
-
-To mitigate potential failures in displacement-field computation caused by limited hardware resources, the precomputed displacement field for the `ref`-to-`t1` pair is also included in this submission.
-
-For `DisplacementFieldEstimation_one_cardiac_cycle_data/`:
-
-- number of files: 60 split volume files.
-- included files:
-  `volumeMatrices/volumeMatrix_01.mat` to `volumeMatrices/volumeMatrix_60.mat` (each file: 219 MB)
-
-
-### C. Hardware Requirement and Test Record
-
-The GPU-based workflow was tested on three GPU platforms:
-
-- NVIDIA H100
-- NVIDIA A800
-- NVIDIA GeForce RTX 4090 with 48 GB of memory (`409048G`)
-
-During one representative run, the recorded peak resource usage was:
-
-- peak GPU memory usage: 44,247 MiB
-- peak RAM usage: 18,458 MiB
-
-Accordingly, the GPU workflow should be executed on hardware with sufficient GPU memory and system RAM. In practice, a 48 GB GPU is recommended for stable execution of the full-resolution workflow.
-
-Across H100, A800, and RTX 4090 48 GB, the resulting displacement-field estimation outputs were found to be broadly consistent, with no obvious hardware-dependent differences observed in the final results or visual patterns.
-
-### D. References
+## References
 
 1. Thirion, J.-P. (1998). Image matching as a diffusion process: an analogy with Maxwell's demons. *Medical Image Analysis*, 2(3), 243-260. https://doi.org/10.1016/S1361-8415(98)80022-4
 2. Vercauteren, T., Pennec, X., Perchant, A., & Ayache, N. (2009). Diffeomorphic Demons: Efficient non-parametric image registration. *NeuroImage*, 45(1, Supplement), S61-S72. https://doi.org/10.1016/j.neuroimage.2008.10.040
 3. MathWorks. *imregdemons*. Image Processing Toolbox Documentation. https://www.mathworks.com/help/images/ref/imregdemons.html
+
+## License
+
+This repository is distributed under the Apache License 2.0. See `LICENSE.txt` for details.
+
+## Contact
+
+For correspondence regarding this repository, please contact the repository owner.
