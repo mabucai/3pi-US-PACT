@@ -80,6 +80,10 @@ The following incompatible combinations were observed during deployment:
 
 If `mexcuda` still fails, the code will fall back to the CPU implementation, but full-resolution runs may become substantially slower.
 
+Typical installation time
+
+On a normal desktop computer with MATLAB already installed, the installation usually takes less than 10 minutes.
+
 ## Usage
 
 1. Prepare the input files in `DisplacementFieldEstimation_data/` for the two-time-point workflow, or in `DisplacementFieldEstimation_one_cardiac_cycle_data/volumeMatrices/` for the one-cardiac-cycle workflow.
@@ -96,6 +100,13 @@ matlab -batch "DisplacementFieldEstimation"
 # Process DisplacementFieldEstimation_one_cardiac_cycle_data
 matlab -batch "DisplacementFieldEstimation_one_cardiac_cycle"
 ```
+## Expected run time
+
+The expected run time depends strongly on hardware.
+
+On a high-memory CUDA-capable GPU, the demo is expected to run substantially faster than the CPU fallback mode. On a normal desktop computer without a suitable GPU, the CPU fallback may take much longer for full-resolution data.
+
+Because the included displacement field D_ref2t1.bin is precomputed, the visualization part of the demo can be completed more quickly when this file is already present.
 
 ## Outputs
 
